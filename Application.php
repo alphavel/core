@@ -131,7 +131,7 @@ class Application
         $this->boot();
 
         $host = $this->config('server.host', '0.0.0.0');
-        $port = $this->config('server.port', 9501);
+        $port = $this->config('server.port', 9999);
 
         $this->server = new Server($host, $port);
 

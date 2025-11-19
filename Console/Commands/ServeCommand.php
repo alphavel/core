@@ -16,7 +16,7 @@ class ServeCommand extends Command
     public function handle(): int
     {
         $host = $this->ask('Host', '0.0.0.0');
-        $port = $this->ask('Port', '9501');
+        $port = $this->ask('Port', '9999');
 
         $this->info('Starting alphavel server...');
         $this->comment("Server running on: http://{$host}:{$port}");
