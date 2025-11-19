@@ -206,10 +206,11 @@ class Application
     {
         [$controller, $method] = $route['handler'];
 
-        // Transient Pattern: Create new instance per request
-        // Prevents state leakage between requests while maintaining
-        // excellent performance thanks to PHP 8+ JIT optimization
-        $instance = new $controller();
+        // Transient Pattern with Autowiring:
+        // Container resolves dependencies automatically using cached reflection
+        // Performance: Reflection runs once per class, then cached in memory
+        // Safety: Fresh instance per request prevents state leakage
+        $instance = $this->container->make($controller);
 
         return $instance->$method($request, ...array_values($route['params'] ?? []));
     }
