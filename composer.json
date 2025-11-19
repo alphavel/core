@@ -12,9 +12,11 @@
     ],
     "require": {
         "php": "^8.1",
-        "ext-swoole": "*",
         "psr/container": "^2.0",
         "psr/log": "^3.0"
+    },
+    "suggest": {
+        "ext-swoole": "Required for async/coroutine features and high-performance server (520k+ req/s)"
     },
     "autoload": {
         "psr-4": {
