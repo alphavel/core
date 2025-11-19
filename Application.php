@@ -18,6 +18,10 @@ class Application
 
     private array $config = [];
 
+    private array $controllers = [];
+
+    private array $requestPool = [];
+
     private function __construct()
     {
         $this->container = Container::getInstance();
@@ -136,11 +140,13 @@ class Application
         $this->server = new Server($host, $port);
 
         $this->server->set([
-            'worker_num' => $this->config('server.workers', swoole_cpu_num() * 2),
-            'reactor_num' => $this->config('server.reactors', swoole_cpu_num() * 2),
+            'worker_num' => $this->config('server.workers', function_exists('swoole_cpu_num') ? swoole_cpu_num() * 2 : 8),
+            'reactor_num' => $this->config('server.reactors', function_exists('swoole_cpu_num') ? swoole_cpu_num() * 2 : 8),
             'enable_coroutine' => true,
             'max_coroutine' => $this->config('server.max_coroutine', 100000),
             'max_conn' => $this->config('server.max_connections', 10000),
+            'max_request' => $this->config('server.max_request', 0),
+            'dispatch_mode' => $this->config('server.dispatch_mode', 1),
             'open_tcp_nodelay' => true,
             'enable_reuse_port' => true,
             'buffer_output_size' => 2 * 1024 * 1024,
@@ -153,7 +159,14 @@ class Application
 
     public function handleRequest($request, $response): void
     {
-        $psr = $this->make('request')->createFromSwoole($request);
+        // Request Pooling: Reuse Request object if available
+        if (!empty($this->requestPool)) {
+            $psr = array_pop($this->requestPool);
+        } else {
+            $psr = $this->make('request');
+        }
+
+        $psr->createFromSwoole($request);
         $router = $this->make('router');
 
         $route = $router->dispatch($psr->getUri(), $psr->getMethod());
@@ -161,7 +174,11 @@ class Application
         if (! $route) {
             $response->status(404);
             $response->end(json_encode(['error' => 'Not Found']));
-
+            
+            // Recycle request
+            if (count($this->requestPool) < 1024) {
+                $this->requestPool[] = $psr;
+            }
             return;
         }
 
@@ -174,6 +191,16 @@ class Application
             $this->sendResponse($response, $result);
         } catch (\Throwable $e) {
             $this->make('exception')->renderSwoole($e, $response);
+        } finally {
+            // Recycle request
+            if (count($this->requestPool) < 1024) {
+                $this->requestPool[] = $psr;
+            }
+            
+            // Release DB connection if it was used
+            if (class_exists(\Alphavel\Database\DB::class)) {
+                \Alphavel\Database\DB::release();
+            }
         }
     }
 
@@ -181,7 +208,12 @@ class Application
     {
         [$controller, $method] = $route['handler'];
 
-        $instance = new $controller();
+        // Singleton Controller: Reuse controller instance
+        if (!isset($this->controllers[$controller])) {
+            $this->controllers[$controller] = new $controller();
+        }
+        
+        $instance = $this->controllers[$controller];
 
         return $instance->$method($request, ...array_values($route['params'] ?? []));
     }

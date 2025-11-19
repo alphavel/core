@@ -19,30 +19,61 @@ class RouteCacheCommand extends Command
     {
         $this->info('Caching routes...');
 
-        $routesFile = getcwd() . '/config/routes.php';
-        $cachePath = getcwd() . '/storage/cache/routes.php';
+        $app = \Alphavel\Framework\Application::getInstance();
+        $router = $app->make('router');
 
-        if (! file_exists($routesFile)) {
-            $this->error('Routes file not found: config/routes.php');
-
-            return 1;
+        // Ensure routes are loaded
+        if (empty($router->getRoutes())) {
+            $routesFile = getcwd() . '/routes/api.php';
+            if (file_exists($routesFile)) {
+                require $routesFile;
+            }
         }
 
-        // Simply copy the routes file to cache
-        // In production, the application can check for cached routes first
-        copy($routesFile, $cachePath);
+        $staticRoutes = $router->getStaticRoutes();
+        $dynamicRoutes = $router->getDynamicRoutes();
+
+        // Check for closures
+        $this->checkForClosures($staticRoutes);
+        $this->checkForClosures($dynamicRoutes);
+
+        $cache = [
+            'static' => $staticRoutes,
+            'dynamic' => $dynamicRoutes,
+        ];
+
+        $cachePath = getcwd() . '/storage/cache/routes.php';
+        
+        // Use serialization with base64 encoding to handle objects safely
+        $content = "<?php\n\nreturn unserialize(base64_decode('" . base64_encode(serialize($cache)) . "'));\n";
+
+        file_put_contents($cachePath, $content);
 
         $this->info('✓ Routes cached successfully!');
         $this->comment('  Cached to: storage/cache/routes.php');
-        $this->comment('  To clear cache, run: ./alphavel route:clear');
-        $this->comment('');
-        $this->comment('  Note: Update your bootstrap to load cached routes:');
-        $this->comment("  if (file_exists(__DIR__ . '/storage/cache/routes.php')) {");
-        $this->comment("      require __DIR__ . '/storage/cache/routes.php';");
-        $this->comment('  } else {');
-        $this->comment("      require __DIR__ . '/config/routes.php';");
-        $this->comment('  }');
-
+        
         return 0;
+    }
+
+    private function checkForClosures(array $routes): void
+    {
+        array_walk_recursive($routes, function ($item) {
+            if ($item instanceof \Alphavel\Framework\Route) {
+                $handler = $this->getPrivateProperty($item, 'handler');
+                if ($handler instanceof \Closure) {
+                    $this->error('Unable to cache routes with Closures.');
+                    $this->error('Route: ' . $this->getPrivateProperty($item, 'method') . ' ' . $this->getPrivateProperty($item, 'path'));
+                    throw new \RuntimeException('Route caching failed due to Closure handler.');
+                }
+            }
+        });
+    }
+
+    private function getPrivateProperty(object $object, string $property): mixed
+    {
+        $reflection = new \ReflectionClass($object);
+        $prop = $reflection->getProperty($property);
+        $prop->setAccessible(true);
+        return $prop->getValue($object);
     }
 }
