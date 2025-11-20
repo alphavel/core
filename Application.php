@@ -13,12 +13,16 @@ class Application
     private array $providers = [];
 
     private array $bootedProviders = [];
+    
+    private array $deferredProviders = []; // Lazy-loaded providers
 
     private ?Server $server = null;
 
     private array $config = [];
 
     private array $requestPool = [];
+    
+    private bool $booted = false;
 
     private function __construct()
     {
@@ -35,9 +39,15 @@ class Application
         return self::$instance;
     }
 
-    public function register(string $provider): void
+    public function register(string $provider, bool $defer = false): void
     {
         if (isset($this->providers[$provider])) {
+            return;
+        }
+
+        // Lazy loading: defer provider registration until boot
+        if ($defer && !$this->booted) {
+            $this->deferredProviders[$provider] = true;
             return;
         }
 
@@ -95,12 +105,25 @@ class Application
 
     public function boot(): void
     {
+        if ($this->booted) {
+            return;
+        }
+
+        // Register deferred providers before booting
+        foreach ($this->deferredProviders as $provider => $_) {
+            $this->register($provider, false);
+        }
+        $this->deferredProviders = [];
+
+        // Boot all registered providers
         foreach ($this->providers as $name => $provider) {
             if (! isset($this->bootedProviders[$name])) {
                 $provider->boot();
                 $this->bootedProviders[$name] = true;
             }
         }
+
+        $this->booted = true;
     }
 
     public function make(string $abstract): mixed

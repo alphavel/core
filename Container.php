@@ -19,6 +19,12 @@ class Container implements ContainerInterface
      * Format: ['ClassName' => [['name' => 'param', 'class' => 'TypeHint'], ...]]
      */
     private static array $reflectionCache = [];
+    
+    /**
+     * Fast path: classes with no constructor dependencies
+     * Format: ['ClassName' => true]
+     */
+    private static array $simpleClasses = [];
 
     private function __construct()
     {
@@ -107,14 +113,19 @@ class Container implements ContainerInterface
      */
     private function resolve(string $class): mixed
     {
+        // Fast path: simple classes without dependencies
+        if (isset(self::$simpleClasses[$class])) {
+            return new $class();
+        }
+
         // Use cached reflection if available
         if (!isset(self::$reflectionCache[$class])) {
             $reflector = new \ReflectionClass($class);
             $constructor = $reflector->getConstructor();
 
-            if ($constructor === null) {
-                // No constructor, cache empty array and instantiate
-                self::$reflectionCache[$class] = [];
+            if ($constructor === null || $constructor->getNumberOfParameters() === 0) {
+                // No constructor or no parameters - mark as simple
+                self::$simpleClasses[$class] = true;
                 return new $class();
             }
 
