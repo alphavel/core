@@ -1,7 +1,6 @@
 {
     "name": "alphavel/alphavel",
     "description": "Core components of Alphavel Framework - Ultra-fast PHP framework powered by Swoole",
-    "version": "1.0.0",
     "type": "library",
     "keywords": ["framework", "swoole", "high-performance", "alphavel", "php"],
     "license": "MIT",
