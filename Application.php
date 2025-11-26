@@ -272,7 +272,23 @@ class Application
 
     private function callController(array $route, Request $request): Response
     {
-        [$controller, $method] = $route['handler'];
+        $handler = $route['handler'];
+
+        // Handle Closure routes
+        if ($handler instanceof \Closure) {
+            $result = $handler($request, ...array_values($route['params'] ?? []));
+            
+            // If closure returns Response, use it directly
+            if ($result instanceof Response) {
+                return $result;
+            }
+            
+            // Otherwise wrap in Response
+            return Response::make()->json($result);
+        }
+
+        // Handle Controller@method routes
+        [$controller, $method] = $handler;
 
         // Transient Pattern with Autowiring:
         // Container resolves dependencies automatically using cached reflection
