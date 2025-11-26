@@ -270,8 +270,14 @@ class Application
         }
     }
 
-    private function callController(array $route, Request $request): Response
+    private function callController(mixed $route, Request $request): Response
     {
+        // If route is a Closure directly (shouldn't happen but handle it)
+        if ($route instanceof \Closure) {
+            $result = $route($request);
+            return $result instanceof Response ? $result : Response::make()->json($result);
+        }
+
         $handler = $route['handler'];
 
         // Handle Closure routes
